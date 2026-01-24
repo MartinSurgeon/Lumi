@@ -35,6 +35,7 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
 const App: React.FC = () => {
     const [showSplash, setShowSplash] = useState(true);
     const [showAnalytics, setShowAnalytics] = useState(false);
+    const [showLogoutModal, setShowLogoutModal] = useState(false);
 
     // Theme Management
     const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -110,14 +111,12 @@ const App: React.FC = () => {
     }, [profile]);
 
     const handleLogout = () => {
-        if (confirm("Are you sure you want to log out?\n\nThis will delete your profile and chat history from this device.")) {
-            localStorage.removeItem('lumi_student_profile');
-            localStorage.removeItem('lumi_chat_history');
-            localStorage.removeItem('lumi_learning_stats');
-            localStorage.removeItem('lumi_sessions');
-            setProfile(null);
-            window.location.reload();
-        }
+        localStorage.removeItem('lumi_student_profile');
+        localStorage.removeItem('lumi_chat_history');
+        localStorage.removeItem('lumi_learning_stats');
+        localStorage.removeItem('lumi_sessions');
+        setProfile(null);
+        window.location.reload();
     };
 
     const {
@@ -254,6 +253,52 @@ const App: React.FC = () => {
 
             {showAnalytics && <AnalyticsDashboard onClose={() => setShowAnalytics(false)} />}
 
+            {/* Logout Confirmation Modal - Duolingo Style */}
+            {showLogoutModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border-4 border-duo-gray dark:border-slate-800 shadow-2xl max-w-md w-full p-8 animate-zoom-in">
+                        {/* Icon */}
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-duo-red/10 dark:bg-duo-red/20 p-6 rounded-2xl border-4 border-duo-red/30">
+                                <LogOut size={48} className="text-duo-red" strokeWidth={3} />
+                            </div>
+                        </div>
+
+                        {/* Title */}
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-3 uppercase tracking-tight">
+                            log out?
+                        </h2>
+
+                        {/* Message */}
+                        <p className="text-slate-600 dark:text-slate-400 text-center mb-8 font-bold">
+                            This will delete your profile and chat history from this device.
+                        </p>
+
+                        {/* Buttons */}
+                        <div className="flex gap-3">
+                            {/* Cancel Button */}
+                            <button
+                                onClick={() => setShowLogoutModal(false)}
+                                className="flex-1 bg-duo-gray dark:bg-slate-800 text-slate-900 dark:text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-gray-dark dark:border-slate-950 active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-gray/80"
+                            >
+                                cancel
+                            </button>
+
+                            {/* Logout Button */}
+                            <button
+                                onClick={() => {
+                                    setShowLogoutModal(false);
+                                    handleLogout();
+                                }}
+                                className="flex-1 bg-duo-red text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-red-dark active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-red/90"
+                            >
+                                log out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Duolingo Style Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 bg-[#f7f7f7] dark:bg-slate-950 transition-colors duration-500">
                 <div className="absolute top-[20%] left-[10%] w-[300px] h-[300px] bg-duo-green/5 rounded-full blur-[80px] animate-pulse-glow"></div>
@@ -312,7 +357,7 @@ const App: React.FC = () => {
                                 <span className="text-lg font-black text-white">{profile.name.charAt(0)}</span>
                             </div>
                             <button
-                                onClick={handleLogout}
+                                onClick={() => setShowLogoutModal(true)}
                                 className="p-2 text-duo-gray-dark hover:text-duo-red transition-all"
                                 title="Log Out"
                             >
