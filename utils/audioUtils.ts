@@ -44,27 +44,37 @@ export async function decodeAudioData(
 export function downsampleTo16000(input: Float32Array, inputSampleRate: number): Float32Array {
   if (inputSampleRate === 16000) return input;
   if (inputSampleRate < 16000) {
-     // Upsampling is not handled here, just return as is (might sound slow/low pitched if API expects 16k)
-     return input; 
+    // Upsampling is not handled here, just return as is (might sound slow/low pitched if API expects 16k)
+    return input;
   }
-  
+
   const ratio = inputSampleRate / 16000;
   const newLength = Math.ceil(input.length / ratio);
   const result = new Float32Array(newLength);
-  
+
+  // Simple box-car low-pass filter to reduce aliasing
+  // This averages nearby samples before decimation
+  const filterSize = Math.max(1, Math.floor(ratio / 2));
+
   for (let i = 0; i < newLength; i++) {
-    const offset = i * ratio;
-    const index = Math.floor(offset);
-    const nextIndex = index + 1;
-    const t = offset - index;
-    
-    // Linear interpolation
-    const s0 = input[index] || 0;
-    const s1 = input[nextIndex] || 0; 
-    
-    result[i] = s0 * (1 - t) + s1 * t;
+    const centerOffset = i * ratio;
+    const centerIndex = Math.floor(centerOffset);
+
+    // Apply simple averaging filter
+    let sum = 0;
+    let count = 0;
+
+    for (let j = -filterSize; j <= filterSize; j++) {
+      const sampleIndex = centerIndex + j;
+      if (sampleIndex >= 0 && sampleIndex < input.length) {
+        sum += input[sampleIndex];
+        count++;
+      }
+    }
+
+    result[i] = count > 0 ? sum / count : 0;
   }
-  
+
   return result;
 }
 
@@ -75,7 +85,7 @@ export function createPcmBlob(data: Float32Array): Blob {
     // Convert Float32 (-1.0 to 1.0) to Int16
     int16[i] = Math.max(-32768, Math.min(32767, data[i] * 32768));
   }
-  
+
   return {
     data: arrayBufferToBase64(int16.buffer),
     mimeType: 'audio/pcm;rate=16000',
@@ -83,14 +93,14 @@ export function createPcmBlob(data: Float32Array): Blob {
 }
 
 export async function blobToBase64(blob: globalThis.Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const result = reader.result as string;
-            const base64 = result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob); 
-    });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
