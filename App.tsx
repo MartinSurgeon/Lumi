@@ -141,6 +141,14 @@ const App: React.FC = () => {
     // Handle Camera Stream locally for the video element
     useEffect(() => {
         if (isVideoActive) {
+            // Stop existing stream before requesting new one (important for camera flip)
+            if (videoRef.current && videoRef.current.srcObject) {
+                const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+                tracks.forEach(track => track.stop());
+                videoRef.current.srcObject = null;
+            }
+
+            // Request new camera stream
             navigator.mediaDevices.getUserMedia({
                 video: {
                     facingMode: cameraFacingMode,
