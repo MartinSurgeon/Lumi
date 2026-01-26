@@ -36,6 +36,7 @@ const App: React.FC = () => {
     const [showSplash, setShowSplash] = useState(true);
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showInstallModal, setShowInstallModal] = useState(false);
 
     // Theme Management
     const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -93,6 +94,7 @@ const App: React.FC = () => {
 
     const handleInstallClick = () => {
         if (deferredPrompt) {
+            setShowInstallModal(false);
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then((choiceResult: any) => {
                 if (choiceResult.outcome === 'accepted') {
@@ -253,6 +255,66 @@ const App: React.FC = () => {
 
             {showAnalytics && <AnalyticsDashboard onClose={() => setShowAnalytics(false)} />}
 
+            {/* Install App Modal - Duolingo Style */}
+            {showInstallModal && deferredPrompt && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border-4 border-duo-green dark:border-duo-green-dark shadow-2xl max-w-md w-full p-8 animate-zoom-in">
+                        {/* Icon */}
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-duo-green/10 dark:bg-duo-green/20 p-6 rounded-2xl border-4 border-duo-green/30">
+                                <Download size={48} className="text-duo-green" strokeWidth={3} />
+                            </div>
+                        </div>
+
+                        {/* Title */}
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-3 uppercase tracking-tight">
+                            install lumi?
+                        </h2>
+
+                        {/* Benefits */}
+                        <div className="space-y-2 mb-8">
+                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
+                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
+                                </div>
+                                <span className="font-bold text-sm">Works offline</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
+                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
+                                </div>
+                                <span className="font-bold text-sm">Faster performance</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
+                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
+                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
+                                </div>
+                                <span className="font-bold text-sm">Quick access from home screen</span>
+                            </div>
+                        </div>
+
+                        {/* Buttons */}
+                        <div className="flex gap-3">
+                            {/* Cancel Button */}
+                            <button
+                                onClick={() => setShowInstallModal(false)}
+                                className="flex-1 bg-duo-gray dark:bg-slate-800 text-slate-900 dark:text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-gray-dark dark:border-slate-950 active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-gray/80"
+                            >
+                                later
+                            </button>
+
+                            {/* Install Button */}
+                            <button
+                                onClick={handleInstallClick}
+                                className="flex-1 bg-duo-green text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-green-dark active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-green/90"
+                            >
+                                install
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Logout Confirmation Modal - Duolingo Style */}
             {showLogoutModal && (
                 <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -328,7 +390,7 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-2">
                         {deferredPrompt && (
                             <button
-                                onClick={handleInstallClick}
+                                onClick={() => setShowInstallModal(true)}
                                 className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-duo-blue text-white text-xs font-black border-b-4 border-duo-blue-dark active:border-b-0 active:translate-y-1 transition-all shadow-sm"
                             >
                                 <Download size={14} strokeWidth={4} />
@@ -514,32 +576,42 @@ const App: React.FC = () => {
                     ) : (
                         /* On-session Transcript Component */
                         <>
-                            {/* Confidence Progress Bar */}
+                            {/* Confidence Tracker - Compact */}
                             {learningStats && conf && (
-                                <div className="px-6 py-4 relative z-20">
-                                    <div className={`p-4 rounded-3xl border-2 border-b-[6px] ${conf.bg} ${conf.border} transition-all duration-500 shadow-sm bg-white dark:bg-slate-800`}>
-                                        <div className="flex justify-between items-center mb-3 px-1">
-                                            <div className="flex items-center gap-3">
-                                                <div className={`p-2 rounded-xl bg-white border-2 border-b-4 ${conf.border} shadow-sm`}>
-                                                    <conf.icon size={18} className={conf.color} />
-                                                </div>
-                                                <span className={`text-sm font-black uppercase tracking-tight ${conf.color}`}>
-                                                    {conf.label}
-                                                </span>
+                                <div className="px-4 sm:px-6 py-3 relative z-20 border-b-2 border-duo-gray/30 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
+                                    <div className="flex items-center gap-4">
+                                        {/* Left: Icon + Score */}
+                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                            <div className={`p-1.5 rounded-lg bg-white dark:bg-slate-800 border-2 border-b-3 ${conf.border} shadow-sm`}>
+                                                <conf.icon size={16} className={conf.color} strokeWidth={3} />
                                             </div>
-                                            <div className="text-right">
-                                                <span className={`text-2xl font-black ${conf.color}`}>
+                                            <div>
+                                                <div className={`text-xl font-black ${conf.color} leading-none`}>
                                                     {learningStats.understandingScore}%
-                                                </span>
+                                                </div>
+                                                <div className="text-[9px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">
+                                                    confidence
+                                                </div>
                                             </div>
                                         </div>
 
-                                        <div className="h-6 w-full bg-slate-200/50 dark:bg-slate-900/50 rounded-full border-2 border-duo-gray dark:border-slate-800 overflow-hidden relative p-[2px]">
-                                            <div
-                                                className={`h-full bg-duo-green border-r-2 border-duo-green-dark transition-all duration-1000 ease-out rounded-full`}
-                                                style={{ width: `${learningStats.understandingScore}%` }}
-                                            />
-                                            <div className="absolute top-1.5 left-3 w-1/3 h-1 bg-white/30 rounded-full pointer-events-none"></div>
+                                        {/* Right: Progress Bar + Label */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-xs font-black uppercase tracking-tight ${conf.color}`}>
+                                                    {conf.label}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-slate-500 dark:text-slate-500">
+                                                    Lumi's understanding estimated
+                                                </span>
+                                            </div>
+                                            <div className="h-3 w-full bg-slate-200/50 dark:bg-slate-900/50 rounded-full border border-duo-gray/30 dark:border-slate-800 overflow-hidden relative">
+                                                <div
+                                                    className={`h-full bg-duo-green border-r border-duo-green-dark transition-all duration-1000 ease-out rounded-full`}
+                                                    style={{ width: `${learningStats.understandingScore}%` }}
+                                                />
+                                                <div className="absolute top-0.5 left-2 w-1/4 h-0.5 bg-white/30 rounded-full pointer-events-none"></div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
