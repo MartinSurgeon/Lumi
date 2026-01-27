@@ -539,7 +539,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
             `;
 
                 const config = {
-                    model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                    model: 'gemini-2.5-flash-native-audio-preview-12-2025',
                     callbacks: {
                         onopen: async () => {
                             console.log("Session connected");
@@ -636,9 +636,9 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                                             }
                                         }
 
-                                        // Increased buffering delay for more stable playback (80ms -> 150ms)
-                                        const bufferingDelay = 0.15;
-                                        const safetyMargin = 0.02; // 20ms safety margin to prevent overlaps
+                                        // Optimized buffering delay for smoother playback (reduced from 150ms to 80ms)
+                                        const bufferingDelay = 0.08;
+                                        const safetyMargin = 0.01; // 10ms safety margin
 
                                         if (nextStartTimeRef.current < ctx.currentTime + safetyMargin) {
                                             nextStartTimeRef.current = ctx.currentTime + bufferingDelay;

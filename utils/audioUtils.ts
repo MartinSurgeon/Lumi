@@ -12,11 +12,13 @@ export function base64ToUint8Array(base64: string): Uint8Array {
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  let binary = '';
   const bytes = new Uint8Array(buffer);
+  let binary = '';
   const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  // Use a faster way to convert bytes to binary string
+  // For small to medium buffers, this is significantly faster than a manual loop
+  for (let i = 0; i < len; i += 8192) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 8192)));
   }
   return btoa(binary);
 }
@@ -43,36 +45,24 @@ export async function decodeAudioData(
 
 export function downsampleTo16000(input: Float32Array, inputSampleRate: number): Float32Array {
   if (inputSampleRate === 16000) return input;
-  if (inputSampleRate < 16000) {
-    // Upsampling is not handled here, just return as is (might sound slow/low pitched if API expects 16k)
-    return input;
-  }
 
   const ratio = inputSampleRate / 16000;
   const newLength = Math.ceil(input.length / ratio);
   const result = new Float32Array(newLength);
 
-  // Simple box-car low-pass filter to reduce aliasing
-  // This averages nearby samples before decimation
-  const filterSize = Math.max(1, Math.floor(ratio / 2));
-
+  // Optimized downsampling: Linear interpolation or simple decimation is faster than box-car filter
+  // and usually sufficient for speech.
   for (let i = 0; i < newLength; i++) {
-    const centerOffset = i * ratio;
-    const centerIndex = Math.floor(centerOffset);
+    const offset = i * ratio;
+    const index = Math.floor(offset);
+    const fraction = offset - index;
 
-    // Apply simple averaging filter
-    let sum = 0;
-    let count = 0;
-
-    for (let j = -filterSize; j <= filterSize; j++) {
-      const sampleIndex = centerIndex + j;
-      if (sampleIndex >= 0 && sampleIndex < input.length) {
-        sum += input[sampleIndex];
-        count++;
-      }
+    if (index + 1 < input.length) {
+      // Linear interpolation
+      result[i] = input[index] * (1 - fraction) + input[index + 1] * fraction;
+    } else {
+      result[i] = input[index];
     }
-
-    result[i] = count > 0 ? sum / count : 0;
   }
 
   return result;
