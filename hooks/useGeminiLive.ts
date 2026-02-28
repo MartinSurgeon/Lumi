@@ -408,7 +408,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
         // Ensure Audio Context is initialized
         if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            audioContextRef.current = new AudioContextClass({ latencyHint: 'interactive' });
+            audioContextRef.current = new AudioContextClass({ latencyHint: 'interactive', sampleRate: 16000 });
 
             // Add state change monitoring for automatic recovery
             audioContextRef.current.addEventListener('statechange', () => {
@@ -662,17 +662,9 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                                             segmentGain.connect(outputGainNodeRef.current);
 
                                             const startTime = nextStartTimeRef.current;
-                                            const fadeInDuration = 0.010; // Increased from 5ms to 10ms
-                                            const fadeOutDuration = 0.010; // Add fade-out to prevent pops
                                             const endTime = startTime + audioBuffer.duration;
 
-                                            // Smooth fade-in using exponential ramp (more natural than linear)
-                                            segmentGain.gain.setValueAtTime(0.001, startTime); // Start very quiet
-                                            segmentGain.gain.exponentialRampToValueAtTime(1, startTime + fadeInDuration);
-
-                                            // Smooth fade-out at the end
-                                            segmentGain.gain.setValueAtTime(1, endTime - fadeOutDuration);
-                                            segmentGain.gain.exponentialRampToValueAtTime(0.001, endTime);
+                                            segmentGain.gain.value = 1;
 
                                             source.addEventListener('ended', () => {
                                                 audioSourcesRef.current.delete(source);

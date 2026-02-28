@@ -6,31 +6,10 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import { StudentProfile, ConnectionStatus, ImageResolution } from './types';
 import { useGeminiLive } from './hooks/useGeminiLive';
 import LumiAvatar from './components/LumiAvatar';
-
-// Splash Screen Component
-const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
-    useEffect(() => {
-        const timer = setTimeout(onComplete, 3000);
-        return () => clearTimeout(timer);
-    }, [onComplete]);
-
-    return (
-        <div className="fixed inset-0 z-[60] bg-slate-50 dark:bg-slate-950 flex flex-col items-center justify-center animate-fade-in transition-colors duration-500">
-            <div className="relative mb-6">
-                <div className="absolute inset-0 bg-duo-green/20 blur-[60px] rounded-full animate-pulse-glow"></div>
-                <div className="relative bg-duo-green p-6 rounded-[2rem] border-b-8 border-duo-green-dark shadow-2xl animate-fade-in">
-                    <LumiAvatar size="xl" />
-                </div>
-            </div>
-            <h1 className="text-4xl font-black text-duo-green tracking-tighter lowercase animate-fade-in">
-                lumi
-            </h1>
-            <p className="text-duo-gray-dark font-black mt-2 animate-fade-in uppercase tracking-widest text-xs">
-                your ai study buddy
-            </p>
-        </div>
-    );
-};
+import SplashScreen from './components/SplashScreen';
+import InstallModal from './components/InstallModal';
+import LogoutModal from './components/LogoutModal';
+import Header from './components/Header';
 
 const App: React.FC = () => {
     const [showSplash, setShowSplash] = useState(true);
@@ -257,108 +236,22 @@ const App: React.FC = () => {
 
             {/* Install App Modal - Duolingo Style */}
             {showInstallModal && deferredPrompt && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl border-4 border-duo-green dark:border-duo-green-dark shadow-2xl max-w-md w-full p-8 animate-zoom-in">
-                        {/* Icon */}
-                        <div className="flex justify-center mb-6">
-                            <div className="bg-duo-green/10 dark:bg-duo-green/20 p-6 rounded-2xl border-4 border-duo-green/30">
-                                <Download size={48} className="text-duo-green" strokeWidth={3} />
-                            </div>
-                        </div>
-
-                        {/* Title */}
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-3 uppercase tracking-tight">
-                            install lumi?
-                        </h2>
-
-                        {/* Benefits */}
-                        <div className="space-y-2 mb-8">
-                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
-                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
-                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
-                                </div>
-                                <span className="font-bold text-sm">Works offline</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
-                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
-                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
-                                </div>
-                                <span className="font-bold text-sm">Faster performance</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
-                                <div className="w-6 h-6 rounded-full bg-duo-green/20 flex items-center justify-center flex-shrink-0">
-                                    <Check size={14} className="text-duo-green" strokeWidth={4} />
-                                </div>
-                                <span className="font-bold text-sm">Quick access from home screen</span>
-                            </div>
-                        </div>
-
-                        {/* Buttons */}
-                        <div className="flex gap-3">
-                            {/* Cancel Button */}
-                            <button
-                                onClick={() => setShowInstallModal(false)}
-                                className="flex-1 bg-duo-gray dark:bg-slate-800 text-slate-900 dark:text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-gray-dark dark:border-slate-950 active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-gray/80"
-                            >
-                                later
-                            </button>
-
-                            {/* Install Button */}
-                            <button
-                                onClick={handleInstallClick}
-                                className="flex-1 bg-duo-green text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-green-dark active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-green/90"
-                            >
-                                install
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <InstallModal
+                    deferredPrompt={deferredPrompt}
+                    onClose={() => setShowInstallModal(false)}
+                    onInstall={handleInstallClick}
+                />
             )}
 
             {/* Logout Confirmation Modal - Duolingo Style */}
             {showLogoutModal && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl border-4 border-duo-gray dark:border-slate-800 shadow-2xl max-w-md w-full p-8 animate-zoom-in">
-                        {/* Icon */}
-                        <div className="flex justify-center mb-6">
-                            <div className="bg-duo-red/10 dark:bg-duo-red/20 p-6 rounded-2xl border-4 border-duo-red/30">
-                                <LogOut size={48} className="text-duo-red" strokeWidth={3} />
-                            </div>
-                        </div>
-
-                        {/* Title */}
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-white text-center mb-3 uppercase tracking-tight">
-                            log out?
-                        </h2>
-
-                        {/* Message */}
-                        <p className="text-slate-600 dark:text-slate-400 text-center mb-8 font-bold">
-                            This will delete your profile and chat history from this device.
-                        </p>
-
-                        {/* Buttons */}
-                        <div className="flex gap-3">
-                            {/* Cancel Button */}
-                            <button
-                                onClick={() => setShowLogoutModal(false)}
-                                className="flex-1 bg-duo-gray dark:bg-slate-800 text-slate-900 dark:text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-gray-dark dark:border-slate-950 active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-gray/80"
-                            >
-                                cancel
-                            </button>
-
-                            {/* Logout Button */}
-                            <button
-                                onClick={() => {
-                                    setShowLogoutModal(false);
-                                    handleLogout();
-                                }}
-                                className="flex-1 bg-duo-red text-white px-6 py-4 rounded-2xl font-black text-lg border-b-4 border-duo-red-dark active:border-b-0 active:translate-y-1 transition-all shadow-lg uppercase tracking-tight hover:bg-duo-red/90"
-                            >
-                                log out
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <LogoutModal
+                    onClose={() => setShowLogoutModal(false)}
+                    onLogout={() => {
+                        setShowLogoutModal(false);
+                        handleLogout();
+                    }}
+                />
             )}
 
             {/* Duolingo Style Background */}
@@ -368,67 +261,16 @@ const App: React.FC = () => {
             </div>
 
             {/* Header - Duolingo Style Top Bar */}
-            <header className="fixed top-0 left-0 w-full z-[60] bg-white dark:bg-slate-900 border-b-2 border-duo-gray dark:border-slate-800 px-4 py-3 sm:py-4">
-                <div className="max-w-7xl mx-auto flex justify-between items-center transition-all duration-500">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-duo-green p-2 rounded-xl border-b-4 border-duo-green-dark shadow-sm">
-                            <Ghost className="text-white w-5 h-5" />
-                        </div>
-                        <div className="flex flex-col">
-                            <h1 className="text-2xl font-black text-duo-green tracking-tighter leading-none lowercase">
-                                lumi
-                            </h1>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-duo-green animate-pulse' : 'bg-duo-gray-dark'}`}></div>
-                                <span className="text-[10px] font-black text-duo-gray-dark uppercase tracking-widest leading-none">
-                                    {isConnected ? 'LIVE' : 'OFFLINE'}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        {deferredPrompt && (
-                            <button
-                                onClick={() => setShowInstallModal(true)}
-                                className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-duo-blue text-white text-xs font-black border-b-4 border-duo-blue-dark active:border-b-0 active:translate-y-1 transition-all shadow-sm"
-                            >
-                                <Download size={14} strokeWidth={4} />
-                                GET APP
-                            </button>
-                        )}
-
-                        <button
-                            onClick={toggleTheme}
-                            className="p-2.5 text-duo-gray-dark hover:text-duo-green rounded-xl border-2 border-transparent hover:border-duo-gray transition-all shadow-sm md:shadow-none"
-                            title="Toggle Theme"
-                        >
-                            {theme === 'dark' ? <Sun size={20} strokeWidth={3} /> : <Moon size={20} strokeWidth={3} />}
-                        </button>
-
-                        <button
-                            onClick={() => setShowAnalytics(true)}
-                            className="p-2.5 text-duo-blue hover:text-duo-blue-dark rounded-xl border-2 border-transparent hover:border-duo-gray transition-all shadow-sm md:shadow-none"
-                            title="View Analytics"
-                        >
-                            <BarChart2 size={20} strokeWidth={3} />
-                        </button>
-
-                        <div className="flex items-center gap-3 pl-3 ml-2 border-l-2 border-duo-gray dark:border-slate-800">
-                            <div className="h-10 w-10 rounded-xl bg-duo-yellow border-b-4 border-duo-yellow-dark flex items-center justify-center p-1 shadow-sm">
-                                <span className="text-lg font-black text-white">{profile.name.charAt(0)}</span>
-                            </div>
-                            <button
-                                onClick={() => setShowLogoutModal(true)}
-                                className="p-2 text-duo-gray-dark hover:text-duo-red transition-all"
-                                title="Log Out"
-                            >
-                                <LogOut size={20} strokeWidth={3} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </header>
+            <Header
+                isConnected={isConnected}
+                deferredPrompt={deferredPrompt}
+                theme={theme}
+                profile={profile}
+                onInstallClick={() => setShowInstallModal(true)}
+                onToggleTheme={toggleTheme}
+                onShowAnalytics={() => setShowAnalytics(true)}
+                onShowLogout={() => setShowLogoutModal(true)}
+            />
 
             {/* Main Layout - Duolingo Style Stage + Cards */}
             <main className="flex-1 w-full flex flex-col lg:flex-row relative pt-[60px] sm:pt-[72px] overflow-hidden">

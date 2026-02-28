@@ -47,7 +47,7 @@ export function downsampleTo16000(input: Float32Array, inputSampleRate: number):
   if (inputSampleRate === 16000) return input;
 
   const ratio = inputSampleRate / 16000;
-  const newLength = Math.ceil(input.length / ratio);
+  const newLength = Math.floor(input.length / ratio);
   const result = new Float32Array(newLength);
 
   // Optimized downsampling: Linear interpolation or simple decimation is faster than box-car filter
@@ -60,7 +60,7 @@ export function downsampleTo16000(input: Float32Array, inputSampleRate: number):
     if (index + 1 < input.length) {
       // Linear interpolation
       result[i] = input[index] * (1 - fraction) + input[index + 1] * fraction;
-    } else {
+    } else if (index < input.length) {
       result[i] = input[index];
     }
   }
