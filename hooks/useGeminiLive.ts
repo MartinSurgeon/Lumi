@@ -13,7 +13,7 @@ interface UseGeminiLiveProps {
 // Tool definition for Image Generation
 const generateImageTool: FunctionDeclaration = {
     name: 'generate_educational_image',
-    description: 'Generates a visual aid. Use this PROACTIVELY when explaining physical objects, scientific concepts, math geometry, or history.',
+    description: 'Generates a visual aid image. ONLY use this when the student explicitly asks to see something, or when explaining a concept that absolutely requires a visual (e.g. geometry shapes, anatomy diagrams, maps). Do NOT use for simple math, vocabulary, or concepts easily explained with words.',
     parameters: {
         type: Type.OBJECT,
         properties: {
@@ -125,8 +125,11 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
     const sessionPromiseRef = useRef<Promise<any> | null>(null);
     const aiRef = useRef<GoogleGenAI | null>(null);
     const reconnectAttemptsRef = useRef(0);
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 5;
     const isLiveRef = useRef(false); // Guard to prevent sending data before handshake
+
+    // Session Resumption
+    const sessionHandleRef = useRef<string | null>(null);
 
     // Playback Queue & Scheduling
     const nextStartTimeRef = useRef<number>(0);
@@ -189,6 +192,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
 
         isLiveRef.current = false;
         startTimeRef.current = null;
+        sessionHandleRef.current = null; // Clear handle to prevent auto-reconnect on user disconnect
         setIsAiSpeaking(false);
 
         // Cleanup audio nodes
@@ -523,7 +527,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                 1. TRACKING: Continuously assess ${profile.name}'s understanding (0-100%).
                 2. DIFFICULTY ADJUSTMENT: Beginner (0-40%), Intermediate (41-75%), Advanced (76-100%).
                 3. CHECKPOINTS: Every 3-4 turns, ask a specific "Check for Understanding" question.
-                4. VISUALS: Use 'generate_educational_image' proactively for visual topics.
+                4. VISUALS: Use 'generate_educational_image' SPARINGLY — only when a visual is truly needed (geometry, diagrams, maps, anatomy). Do NOT generate images for simple math, spelling, or concepts easily explained verbally. Ask the student if they'd like a picture before generating one.
                 
                 CHAIN OF THOUGHT (CoT):
                 1. ANALYZE user input.
@@ -715,29 +719,21 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
 
                                                 const enhancedPrompt = `Educational illustration, clear, high-contrast, simple background: ${prompt}`;
 
-                                                const result = await aiRef.current.models.generateContent({
-                                                    model: 'gemini-2.5-flash-image',
-                                                    contents: { parts: [{ text: enhancedPrompt }] },
+                                                const result = await aiRef.current.models.generateImages({
+                                                    model: 'imagen-4.0-fast-generate-001',
+                                                    prompt: enhancedPrompt,
                                                     config: {
-                                                        imageConfig: {
-                                                            aspectRatio: "16:9"
-                                                        }
+                                                        numberOfImages: 1,
+                                                        aspectRatio: '16:9',
                                                     }
                                                 });
 
-                                                let base64Image = null;
-                                                for (const candidate of result.candidates || []) {
-                                                    for (const part of candidate.content?.parts || []) {
-                                                        if (part.inlineData) {
-                                                            base64Image = part.inlineData.data;
-                                                            break;
-                                                        }
-                                                    }
-                                                    if (base64Image) break;
-                                                }
+                                                const generatedImage = result.generatedImages?.[0];
+                                                const base64Image = generatedImage?.image?.imageBytes;
+                                                const mimeType = generatedImage?.image?.mimeType || 'image/png';
 
                                                 if (base64Image) {
-                                                    const imageUrl = `data:image/png;base64,${base64Image}`;
+                                                    const imageUrl = `data:${mimeType};base64,${base64Image}`;
                                                     playFeedbackSound('success');
                                                     setMessages(prev => [...prev, {
                                                         id: Date.now().toString(),
@@ -871,13 +867,45 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                                     setLiveOutput('');
                                 }
                             }
+
+                            // Session Resumption: store the latest handle for reconnection
+                            if ((message as any).sessionResumptionUpdate) {
+                                const update = (message as any).sessionResumptionUpdate;
+                                if (update.resumable && update.newHandle) {
+                                    sessionHandleRef.current = update.newHandle;
+                                    console.log('Session resumption handle updated');
+                                }
+                            }
+
+                            // GoAway: server warns connection will terminate soon
+                            if ((message as any).goAway) {
+                                const goAway = (message as any).goAway;
+                                console.warn(`GoAway received. Time left: ${goAway.timeLeft}`);
+                                // Proactively reconnect before the connection drops
+                                if (sessionHandleRef.current) {
+                                    console.log('Proactively reconnecting before GoAway disconnect...');
+                                    setStatus(ConnectionStatus.CONNECTING);
+                                    disconnect().then(() => {
+                                        setTimeout(establishConnection, 500);
+                                    });
+                                }
+                            }
                         },
                         onclose: () => {
                             console.log("Session closed");
                             isLiveRef.current = false;
-                            startTimeRef.current = null;
                             setIsAiSpeaking(false);
-                            setStatus(ConnectionStatus.DISCONNECTED);
+
+                            // Auto-reconnect if we have a session handle (connection reset, not user-initiated)
+                            if (sessionHandleRef.current && reconnectAttemptsRef.current < MAX_RETRIES) {
+                                reconnectAttemptsRef.current++;
+                                console.log(`Connection closed. Re-establishing with session handle (attempt ${reconnectAttemptsRef.current}/${MAX_RETRIES})...`);
+                                setStatus(ConnectionStatus.CONNECTING);
+                                setTimeout(establishConnection, 1500);
+                            } else {
+                                startTimeRef.current = null;
+                                setStatus(ConnectionStatus.DISCONNECTED);
+                            }
                         },
                         onerror: (err: any) => {
                             console.error("Gemini Live Error:", err);
@@ -917,6 +945,14 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                         },
                         systemInstruction: {
                             parts: [{ text: systemInstructionText }]
+                        },
+                        // Extend session beyond 15-min limit via sliding window compression
+                        contextWindowCompression: {
+                            slidingWindow: {}
+                        },
+                        // Enable seamless reconnection across connection resets
+                        sessionResumption: {
+                            handle: sessionHandleRef.current || undefined
                         }
                     }
                 };
