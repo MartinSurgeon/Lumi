@@ -719,18 +719,29 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
 
                                                 const enhancedPrompt = `Educational illustration, clear, high-contrast, simple background: ${prompt}`;
 
-                                                const result = await aiRef.current.models.generateImages({
-                                                    model: 'imagen-4.0-fast-generate-001',
-                                                    prompt: enhancedPrompt,
+                                                const result = await aiRef.current.models.generateContent({
+                                                    model: 'gemini-2.5-flash-preview-05-20',
+                                                    contents: { parts: [{ text: enhancedPrompt }] },
                                                     config: {
-                                                        numberOfImages: 1,
-                                                        aspectRatio: '16:9',
+                                                        responseModalities: ['IMAGE', 'TEXT'],
+                                                        imageConfig: {
+                                                            aspectRatio: "16:9"
+                                                        }
                                                     }
                                                 });
 
-                                                const generatedImage = result.generatedImages?.[0];
-                                                const base64Image = generatedImage?.image?.imageBytes;
-                                                const mimeType = generatedImage?.image?.mimeType || 'image/png';
+                                                let base64Image = null;
+                                                let mimeType = 'image/png';
+                                                for (const candidate of result.candidates || []) {
+                                                    for (const part of candidate.content?.parts || []) {
+                                                        if (part.inlineData) {
+                                                            base64Image = part.inlineData.data;
+                                                            mimeType = part.inlineData.mimeType || 'image/png';
+                                                            break;
+                                                        }
+                                                    }
+                                                    if (base64Image) break;
+                                                }
 
                                                 if (base64Image) {
                                                     const imageUrl = `data:${mimeType};base64,${base64Image}`;
@@ -756,12 +767,13 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                                                     throw new Error("No image data returned from model");
                                                 }
                                             } catch (err: any) {
-                                                console.error("Image gen failed", err);
-                                                let errorMsg = "Image generation failed.";
+                                                const errStr = err?.message || err?.toString() || 'Unknown error';
+                                                console.error("Image gen failed:", errStr, err);
+                                                let errorMsg = `⚠️ Image generation failed: ${errStr}`;
 
-                                                if (err.message?.includes('429')) {
+                                                if (errStr.includes('429')) {
                                                     errorMsg = "⚠️ Image quota exceeded. Try again later.";
-                                                } else if (err.message?.includes('403')) {
+                                                } else if (errStr.includes('403')) {
                                                     errorMsg = "⚠️ Permission denied for Image Generation. Check API Key billing/permissions.";
                                                 }
 
