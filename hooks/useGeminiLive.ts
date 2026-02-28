@@ -118,7 +118,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
 
     // Processing Nodes
     const inputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-    const processorRef = useRef<ScriptProcessorNode | null>(null);
+    const workletNodeRef = useRef<AudioWorkletNode | null>(null);
     const outputGainNodeRef = useRef<GainNode | null>(null);
 
     // API & Session
@@ -131,7 +131,6 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
     // Playback Queue & Scheduling
     const nextStartTimeRef = useRef<number>(0);
     const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-    const audioQueueRef = useRef<Promise<void>>(Promise.resolve());
 
     // Video Frame Interval
     const videoIntervalRef = useRef<number | null>(null);
@@ -197,10 +196,12 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
             try { inputSourceRef.current.disconnect(); } catch (e) { }
             inputSourceRef.current = null;
         }
-        if (processorRef.current) {
-            try { processorRef.current.disconnect(); } catch (e) { }
-            processorRef.current.onaudioprocess = null;
-            processorRef.current = null;
+        if (workletNodeRef.current) {
+            try {
+                workletNodeRef.current.port.postMessage({ type: 'stop' });
+                workletNodeRef.current.disconnect();
+            } catch (e) { }
+            workletNodeRef.current = null;
         }
 
         // CRITICAL: Clear analyzers and gain nodes so they aren't reused with the wrong AudioContext
@@ -223,7 +224,6 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
         });
         audioSourcesRef.current.clear();
         nextStartTimeRef.current = 0;
-        audioQueueRef.current = Promise.resolve(); // Reset queue
 
         // Close AudioContext
         if (audioContextRef.current?.state !== 'closed') {
@@ -408,7 +408,7 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
         // Ensure Audio Context is initialized
         if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            audioContextRef.current = new AudioContextClass({ latencyHint: 'interactive', sampleRate: 16000 });
+            audioContextRef.current = new AudioContextClass({ latencyHint: 'interactive' });
 
             // Add state change monitoring for automatic recovery
             audioContextRef.current.addEventListener('statechange', () => {
@@ -572,31 +572,59 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                             inputSourceRef.current = currentCtx.createMediaStreamSource(stream);
                             inputSourceRef.current.connect(inputAnalyzerRef.current!);
 
-                            processorRef.current = currentCtx.createScriptProcessor(4096, 1, 1);
+                            // Use AudioWorklet for mic capture (runs on audio thread, not main thread)
+                            try {
+                                await currentCtx.audioWorklet.addModule('/pcm-processor.js');
 
-                            processorRef.current.onaudioprocess = (e) => {
-                                if (isMuted || !isLiveRef.current) return;
+                                const workletNode = new AudioWorkletNode(currentCtx, 'pcm-processor');
+                                workletNodeRef.current = workletNode;
 
-                                // CRITICAL: Check if context is still valid
-                                if (!audioContextRef.current || audioContextRef.current.state === 'closed') return;
+                                workletNode.port.onmessage = (event) => {
+                                    if (event.data.type === 'pcm_data') {
+                                        if (isMuted || !isLiveRef.current) return;
+                                        if (!audioContextRef.current || audioContextRef.current.state === 'closed') return;
 
-                                const inputData = e.inputBuffer.getChannelData(0);
-                                const downsampledData = downsampleTo16000(inputData, audioContextRef.current.sampleRate);
-                                const pcmBlob = createPcmBlob(downsampledData);
+                                        const inputData = event.data.data as Float32Array;
+                                        const downsampledData = downsampleTo16000(inputData, audioContextRef.current.sampleRate);
+                                        const pcmBlob = createPcmBlob(downsampledData);
 
-                                sessionPromiseRef.current?.then(session => {
-                                    if (isLiveRef.current) {
-                                        session.sendRealtimeInput({ media: pcmBlob });
+                                        sessionPromiseRef.current?.then(session => {
+                                            if (isLiveRef.current) {
+                                                session.sendRealtimeInput({ media: pcmBlob });
+                                            }
+                                        }).catch(() => {/* Ignore send errors during disconnect */ });
                                     }
-                                }).catch(() => {/* Ignore send errors during disconnect */ });
-                            };
+                                };
 
-                            inputSourceRef.current.connect(processorRef.current);
+                                inputSourceRef.current.connect(workletNode);
+                                // AudioWorkletNode does not need to be connected to destination for capture
+                            } catch (workletErr) {
+                                // Fallback to ScriptProcessorNode if AudioWorklet is not supported
+                                console.warn('AudioWorklet not supported, falling back to ScriptProcessorNode', workletErr);
 
-                            const silenceNode = currentCtx.createGain();
-                            silenceNode.gain.value = 0;
-                            processorRef.current.connect(silenceNode);
-                            silenceNode.connect(currentCtx.destination);
+                                const processor = currentCtx.createScriptProcessor(4096, 1, 1);
+
+                                processor.onaudioprocess = (e) => {
+                                    if (isMuted || !isLiveRef.current) return;
+                                    if (!audioContextRef.current || audioContextRef.current.state === 'closed') return;
+
+                                    const inputData = e.inputBuffer.getChannelData(0);
+                                    const downsampledData = downsampleTo16000(inputData, audioContextRef.current.sampleRate);
+                                    const pcmBlob = createPcmBlob(downsampledData);
+
+                                    sessionPromiseRef.current?.then(session => {
+                                        if (isLiveRef.current) {
+                                            session.sendRealtimeInput({ media: pcmBlob });
+                                        }
+                                    }).catch(() => { });
+                                };
+
+                                inputSourceRef.current.connect(processor);
+                                const silenceNode = currentCtx.createGain();
+                                silenceNode.gain.value = 0;
+                                processor.connect(silenceNode);
+                                silenceNode.connect(currentCtx.destination);
+                            }
                         },
                         onmessage: async (message: LiveServerMessage) => {
                             const serverContent = message.serverContent;
@@ -620,77 +648,53 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                             for (const part of parts) {
                                 if (part.inlineData?.data && audioContextRef.current && outputGainNodeRef.current) {
                                     const base64Audio = part.inlineData.data;
+                                    const ctx = audioContextRef.current;
 
-                                    audioQueueRef.current = audioQueueRef.current.then(async () => {
-                                        if (!audioContextRef.current || !outputGainNodeRef.current) return;
-                                        const ctx = audioContextRef.current;
+                                    // Resume AudioContext if suspended (fire-and-forget)
+                                    if (ctx.state === 'suspended') {
+                                        ctx.resume().catch(e => console.error('Failed to resume AudioContext', e));
+                                    }
 
-                                        // CRITICAL: Check and resume AudioContext if suspended
-                                        if (ctx.state === 'suspended') {
-                                            try {
-                                                await ctx.resume();
-                                                console.log('AudioContext resumed during playback');
-                                            } catch (e) {
-                                                console.error('Failed to resume AudioContext', e);
-                                                return;
-                                            }
-                                        }
+                                    try {
+                                        // Decode synchronously (no await chain, no promise queue)
+                                        const audioBuffer = await decodeAudioData(
+                                            base64ToUint8Array(base64Audio),
+                                            ctx,
+                                            24000,
+                                            1
+                                        );
 
-                                        // Optimized buffering delay for smoother playback (reduced from 150ms to 80ms)
-                                        const bufferingDelay = 0.08;
-                                        const safetyMargin = 0.01; // 10ms safety margin
+                                        // Small initial buffering delay for gapless scheduling
+                                        const bufferingDelay = 0.05; // 50ms initial buffer
+                                        const safetyMargin = 0.005; // 5ms safety margin
 
                                         if (nextStartTimeRef.current < ctx.currentTime + safetyMargin) {
                                             nextStartTimeRef.current = ctx.currentTime + bufferingDelay;
                                         }
 
-                                        try {
-                                            const audioBuffer = await decodeAudioData(
-                                                base64ToUint8Array(base64Audio),
-                                                ctx,
-                                                24000,
-                                                1
-                                            );
+                                        const source = ctx.createBufferSource();
+                                        source.buffer = audioBuffer;
 
-                                            const segmentGain = ctx.createGain();
-                                            segmentGain.gain.value = 0; // Start at 0 for fade-in
+                                        // Connect directly — no per-segment gain node needed
+                                        source.connect(outputGainNodeRef.current!);
 
-                                            const source = ctx.createBufferSource();
-                                            source.buffer = audioBuffer;
+                                        const startTime = nextStartTimeRef.current;
 
-                                            source.connect(segmentGain);
-                                            segmentGain.connect(outputGainNodeRef.current);
+                                        source.addEventListener('ended', () => {
+                                            audioSourcesRef.current.delete(source);
+                                            if (audioSourcesRef.current.size === 0) {
+                                                setIsAiSpeaking(false);
+                                            }
+                                            try { source.disconnect(); } catch (e) { /* ignore */ }
+                                        });
 
-                                            const startTime = nextStartTimeRef.current;
-                                            const endTime = startTime + audioBuffer.duration;
-
-                                            segmentGain.gain.value = 1;
-
-                                            source.addEventListener('ended', () => {
-                                                audioSourcesRef.current.delete(source);
-                                                if (audioSourcesRef.current.size === 0) {
-                                                    setIsAiSpeaking(false);
-                                                }
-
-                                                // Immediate cleanup - no delay needed
-                                                try {
-                                                    source.disconnect();
-                                                    segmentGain.disconnect();
-                                                } catch (e) {
-                                                    // Node already disconnected, ignore
-                                                }
-                                            });
-
-                                            source.start(startTime);
-                                            nextStartTimeRef.current = endTime; // Use exact end time for better synchronization
-                                            audioSourcesRef.current.add(source);
-                                            setIsAiSpeaking(true);
-                                        } catch (e) {
-                                            console.error("Error decoding/playing audio chunk:", e);
-                                            console.error("Audio data length:", base64Audio?.length || 0);
-                                            // Continue processing next chunks even if one fails
-                                        }
-                                    });
+                                        source.start(startTime);
+                                        nextStartTimeRef.current = startTime + audioBuffer.duration;
+                                        audioSourcesRef.current.add(source);
+                                        setIsAiSpeaking(true);
+                                    } catch (e) {
+                                        console.error("Error decoding/playing audio chunk:", e);
+                                    }
                                 }
                             }
 
@@ -855,7 +859,6 @@ export const useGeminiLive = ({ profile, videoRef, imageResolution }: UseGeminiL
                                 audioSourcesRef.current.clear();
                                 setIsAiSpeaking(false);
                                 nextStartTimeRef.current = 0;
-                                audioQueueRef.current = Promise.resolve();
 
                                 if (currentOutputRef.current.trim()) {
                                     setMessages(prev => [...prev, {
